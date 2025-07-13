@@ -17,6 +17,9 @@ func main() {
 	}
 	defer f.Close()
 
+	fmt.Printf("Reading data from %s\n", inputFilePath)
+	fmt.Println("====================")
+
 	for {
 		b := make([]byte, 8)
 		n, err := f.Read(b)
