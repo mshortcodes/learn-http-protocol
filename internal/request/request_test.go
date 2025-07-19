@@ -39,17 +39,10 @@ func TestRequestFromHeader(t *testing.T) {
 
 	// Test: Invalid out of order request line
 	r, err = RequestFromReader(strings.NewReader("/reviews POST HTTP/1.1\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0\r\nAccept: */*\r\n\r\n"))
-	require.NoError(t, err)
-	require.NotNil(t, r)
-	assert.Equal(t, "POST", r.RequestLine.Method)
-	assert.Equal(t, "/reviews", r.RequestLine.RequestTarget)
-	assert.Equal(t, "1.1", r.RequestLine.HttpVersion)
+	require.Error(t, err)
 
 	// Test: Invalid version request line
 	r, err = RequestFromReader(strings.NewReader("/reviews POST HTTP/1.2\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0\r\nAccept: */*\r\n\r\n"))
-	require.NoError(t, err)
-	require.NotNil(t, r)
-	assert.Equal(t, "POST", r.RequestLine.Method)
-	assert.Equal(t, "/reviews", r.RequestLine.RequestTarget)
-	assert.Equal(t, "1.1", r.RequestLine.HttpVersion)
+	require.Error(t, err)
+
 }
