@@ -2,7 +2,6 @@ package request
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -18,50 +17,71 @@ type RequestLine struct {
 	Method        string
 }
 
+const crlf = "\r\n"
+
 func RequestFromReader(reader io.Reader) (*Request, error) {
-	req, err := io.ReadAll(reader)
+	rawBytes, err := io.ReadAll(reader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read request: %w", err)
 	}
 
-	requestLineBytes := bytes.Split(req, []byte{'\r', '\n'})[0]
-	requestLine, err := parseRequestLine(string(requestLineBytes))
+	requestLine, err := parseRequestLine(rawBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse request line: %w", err)
 	}
 
 	return &Request{
-		RequestLine: requestLine,
+		RequestLine: *requestLine,
 	}, nil
 }
 
-func parseRequestLine(line string) (RequestLine, error) {
-	parts := strings.Split(line, " ")
+func parseRequestLine(data []byte) (*RequestLine, error) {
+	idx := bytes.Index(data, []byte(crlf))
+	if idx == -1 {
+		return nil, fmt.Errorf("could not find CRLF in request-line")
+	}
+
+	requestLineText := string(data[:idx])
+	requestLine, err := requestLineFromString(requestLineText)
+	if err != nil {
+		return nil, err
+	}
+
+	return requestLine, nil
+}
+
+func requestLineFromString(str string) (*RequestLine, error) {
+	parts := strings.Split(str, " ")
 	if len(parts) != 3 {
-		return RequestLine{}, errors.New("invalid number of request line parts")
+		return nil, fmt.Errorf("malformed request line: %s", str)
 	}
 
 	method := parts[0]
-	requestTarget := parts[1]
-	httpVersionParts := parts[2]
-
-	for _, r := range strings.ToLower(method) {
-		if r < 'a' || r > 'z' {
-			return RequestLine{}, errors.New("method contains non-alpha chars")
+	for _, r := range method {
+		if r < 'A' || r > 'Z' {
+			return nil, fmt.Errorf("invalid method: %s", method)
 		}
 	}
 
-	if !strings.Contains(requestTarget, "/") {
-		return RequestLine{}, errors.New("invalid path")
+	requestTarget := parts[1]
+
+	versionParts := strings.Split(parts[2], "/")
+	if len(versionParts) != 2 {
+		return nil, fmt.Errorf("malformed request-line: %s", str)
 	}
 
-	httpVersion := strings.Split(httpVersionParts, "/")[1]
-	if httpVersion != "1.1" {
-		return RequestLine{}, errors.New("unsupported HTTP version")
+	httpPart := versionParts[0]
+	if httpPart != "HTTP" {
+		return nil, fmt.Errorf("unsupported HTTP version: %s", httpPart)
 	}
 
-	return RequestLine{
-		HttpVersion:   httpVersion,
+	version := versionParts[1]
+	if version != "1.1" {
+		return nil, fmt.Errorf("unsupported HTTP version: %s", version)
+	}
+
+	return &RequestLine{
+		HttpVersion:   version,
 		RequestTarget: requestTarget,
 		Method:        method,
 	}, nil
