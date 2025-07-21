@@ -1,12 +1,11 @@
 package main
 
 import (
-	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net"
-	"strings"
+
+	"github.com/mshortcodes/learn-http-protocol/internal/request"
 )
 
 const port = ":42069"
@@ -26,48 +25,14 @@ func main() {
 		}
 		fmt.Println("Accepted connection from", conn.RemoteAddr())
 
-		linesChan := getLinesChannel(conn)
-
-		for line := range linesChan {
-			fmt.Println(line)
+		req, err := request.RequestFromReader(conn)
+		if err != nil {
+			log.Fatalf("error parsing request: %s\n", err)
 		}
-		fmt.Println("Connection to", conn.RemoteAddr(), "closed")
+
+		fmt.Println("Request line:")
+		fmt.Printf("- Method: %s\n", req.RequestLine.Method)
+		fmt.Printf("- Target: %s\n", req.RequestLine.RequestTarget)
+		fmt.Printf("- Version: %s\n", req.RequestLine.HttpVersion)
 	}
-
-}
-
-func getLinesChannel(conn io.ReadCloser) <-chan string {
-	lines := make(chan string)
-
-	go func() {
-		defer conn.Close()
-		defer close(lines)
-
-		var currentLineContents string
-		buffer := make([]byte, 8)
-
-		for {
-			n, err := conn.Read(buffer)
-			if err != nil {
-				if currentLineContents != "" {
-					lines <- currentLineContents
-					currentLineContents = ""
-				}
-				if errors.Is(err, io.EOF) {
-					break
-				}
-				fmt.Printf("error: %s\n", err)
-				break
-			}
-			str := string(buffer[:n])
-
-			parts := strings.Split(str, "\n")
-			for i := 0; i < len(parts)-1; i++ {
-				lines <- fmt.Sprintf("%s%s", currentLineContents, parts[i])
-				currentLineContents = ""
-			}
-			currentLineContents += parts[len(parts)-1]
-		}
-	}()
-	return lines
 }
