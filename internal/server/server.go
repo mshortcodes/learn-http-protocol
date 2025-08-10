@@ -5,6 +5,8 @@ import (
 	"log"
 	"net"
 	"sync/atomic"
+
+	"github.com/mshortcodes/learn-http-protocol/internal/response"
 )
 
 type Server struct {
@@ -48,9 +50,10 @@ func (s *Server) listen() {
 
 func (s *Server) handle(conn net.Conn) {
 	defer conn.Close()
-	response := "HTTP/1.1 200 OK\r\n" +
-		"Content-Type: text/plain\r\n" +
-		"\r\n" +
-		"Hello World!\n"
-	conn.Write([]byte(response))
+	response.WriteStatus(conn, response.StatusOK)
+	h := response.GetDefaultHeaders(0)
+	if err := response.WriteHeaders(conn, h); err != nil {
+		log.Printf("Error writing headers: %v\n", err)
+		return
+	}
 }
