@@ -1,9 +1,7 @@
 package server
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"sync/atomic"
@@ -12,20 +10,7 @@ import (
 	"github.com/mshortcodes/learn-http-protocol/internal/response"
 )
 
-type Handler func(w io.Writer, req *request.Request) *HandlerError
-
-type HandlerError struct {
-	StatusCode response.StatusCode
-	Message    string
-}
-
-func (he HandlerError) Write(w io.Writer) {
-	response.WriteStatus(w, he.StatusCode)
-	messageBytes := []byte(he.Message)
-	headers := response.GetDefaultHeaders(len(messageBytes))
-	response.WriteHeaders(w, headers)
-	w.Write(messageBytes)
-}
+type Handler func(w *response.Writer, req *request.Request)
 
 type Server struct {
 	listener net.Listener
@@ -70,24 +55,14 @@ func (s *Server) listen() {
 
 func (s *Server) handle(conn net.Conn) {
 	defer conn.Close()
+	w := response.NewWriter(conn)
 	req, err := request.RequestFromReader(conn)
 	if err != nil {
-		hErr := &HandlerError{
-			StatusCode: response.StatusBadRequest,
-			Message:    err.Error(),
-		}
-		hErr.Write(conn)
+		w.WriteStatusLine(response.StatusBadRequest)
+		body := []byte(fmt.Sprintf("Error parsing request: %v", err))
+		w.WriteHeaders(response.GetDefaultHeaders(len(body)))
+		w.WriteBody(body)
 		return
 	}
-	buf := bytes.NewBuffer([]byte{})
-	hErr := s.handler(buf, req)
-	if hErr != nil {
-		hErr.Write(conn)
-		return
-	}
-	b := buf.Bytes()
-	response.WriteStatus(conn, response.StatusOK)
-	h := response.GetDefaultHeaders(len(b))
-	response.WriteHeaders(conn, h)
-	conn.Write(b)
+	s.handler(w, req)
 }
