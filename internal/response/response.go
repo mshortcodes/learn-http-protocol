@@ -13,6 +13,7 @@ const (
 	writerStateStatusLine = iota
 	writerStateHeaders
 	writerStateBody
+	writerStateTrailers
 )
 
 type Writer struct {
@@ -51,13 +52,6 @@ func (w *Writer) WriteHeaders(h headers.Headers) error {
 	return err
 }
 
-func (w *Writer) WriteBody(p []byte) (int, error) {
-	if w.writerState != writerStateBody {
-		return 0, fmt.Errorf("cannot write body in state %d", w.writerState)
-	}
-	return w.writer.Write(p)
-}
-
 func GetDefaultHeaders(contentLen int) headers.Headers {
 	h := headers.NewHeaders()
 	h.Set("Content-Length", fmt.Sprintf("%d", contentLen))
@@ -66,8 +60,27 @@ func GetDefaultHeaders(contentLen int) headers.Headers {
 	return h
 }
 
-func WriteHeaders(w io.Writer, h headers.Headers) error {
-	return nil
+func (w *Writer) WriteTrailers(h headers.Headers) error {
+	if w.writerState != writerStateTrailers {
+		return fmt.Errorf("cannot write trailers in state %d", w.writerState)
+	}
+
+	for k, v := range h {
+		_, err := w.writer.Write([]byte(fmt.Sprintf("%s: %s\r\n", k, v)))
+		if err != nil {
+			return err
+		}
+	}
+
+	_, err := w.writer.Write([]byte("\r\n"))
+	return err
+}
+
+func (w *Writer) WriteBody(p []byte) (int, error) {
+	if w.writerState != writerStateBody {
+		return 0, fmt.Errorf("cannot write body in state %d", w.writerState)
+	}
+	return w.writer.Write(p)
 }
 
 func (w *Writer) WriteChunkedBody(p []byte) (int, error) {
@@ -101,5 +114,7 @@ func (w *Writer) WriteChunkedBodyDone() (int, error) {
 	if w.writerState != writerStateBody {
 		return 0, fmt.Errorf("cannot write body in state %d", w.writerState)
 	}
-	return w.writer.Write([]byte("0\r\n\r\n"))
+	n, err := w.writer.Write([]byte("0\r\n"))
+	w.writerState = writerStateTrailers
+	return n, err
 }
